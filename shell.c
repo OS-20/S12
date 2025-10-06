@@ -1,46 +1,80 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/wait.h>
-#include <dirent.h>
+#include<stdio.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<fcntl.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<string.h>
+#include<sys/wait.h>
+#include<dirent.h>
 
-void listFiles(char mode, char *dirname) {
-    DIR *d = opendir(dirname);
-    if (!d) { perror("Cannot open directory"); return; }
-
-    struct dirent *entry;
-    int count = 0;
-    while ((entry = readdir(d)) != NULL) {
-        count++;
-        if (mode == 'f') printf("%s\n", entry->d_name);
+void make_toks(char *s, char *tok[]) {
+    int i = 0;
+    char *p;
+    p = strtok(s, " ");
+    while(p != NULL) {
+        tok[i++] = p;
+        p = strtok(NULL, " ");
     }
-    if (mode == 'n') printf("Total entries: %d\n", count);
-
-    closedir(d);
+    tok[i] = NULL;
 }
 
-int main() {
-    char input[100], *arg[5];
+void list(char *dn, char op) {
+    DIR *dp;
+    struct dirent *entry;
+    int dc = 0, fc = 0;
+    dp = opendir(dn);
+    if(dp == NULL) {
+        printf("file %s not found\n", dn);
+        return;
+    }
+    switch(op) {
+        case 'f':
+            while(entry = readdir(dp)) {
+                if(entry->d_type == DT_REG)
+                    printf("%s\n", entry->d_name);
+            }
+            break;
+        case 'n':
+            while(entry = readdir(dp)) {
+                if(entry->d_type == DT_DIR) dc++;
+                if(entry->d_type == DT_REG) fc++;
+            }
+            printf("%dDir(s)\t %d File(s)\n", dc, fc);
+            break;
+        case 'i':
+            while(entry = readdir(dp)) {
+                if(entry->d_type == DT_REG)
+                    printf("%s\t%lu\n", entry->d_name, entry->d_ino);
+            }
+            break;
+    }
+    closedir(dp);
+}
 
-    while (1) {
-        printf("myshell$ ");
-        if (!fgets(input, sizeof(input), stdin)) break;
-
-        int i = 0;
-        arg[i] = strtok(input, " \t\n");
-        if (!arg[i]) continue;
-        while ((arg[++i] = strtok(NULL, " \t\n")));
-
-        if (!strcmp(arg[0], "exit")) break;
-        else if (!strcmp(arg[0], "list") && arg[1] && arg[2])
-            listFiles(arg[1][0], arg[2]);
-        else {
-            if (fork() == 0) {
-                execvp(arg[0], arg);
-                perror("Command failed");
-                exit(1);
-            } else wait(NULL);
+int main()
+{
+    char buff[80],*args[10];
+    int pid;
+    while(1)
+    {
+        printf("Myshell$");
+        fflush(stdin);
+        fgets(buff,80,stdin);
+        buff[strlen(buff)-1]='\0';
+        make_toks(buff,args);
+        if(strcmp(args[0],"list")==0)
+            list(args[2],args[1][0]);
+        else
+        {
+            pid=fork();
+            if(pid>0)
+                wait(NULL);
+            else
+            {
+                if((execvp(args[0],args)==-1))
+                    printf("Bad Command\n");
+            }
         }
     }
     return 0;
